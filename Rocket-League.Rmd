@@ -1,0 +1,373 @@
+---
+title: "Projet rocket league"
+authors: "Lara Ng et Alyssa Robidoux"
+output: html_document
+date: "2024-11-14"
+---
+
+
+
+```{r load-packages, message = FALSE, eval = TRUE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+
+```
+
+```{r load_csv}
+games_by_players <- read_csv("data/games_by_players.csv")
+
+#https://www.kaggle.com/datasets/dylanmonfret/rlcs-202122
+```
+
+## R Markdown
+
+```{r filter_na}
+games_by_players_no_NA <- na.omit(games_by_players)
+```
+
+```{r creating_our_data.frame}
+games_data <- data.frame(
+games_by_players_no_NA %>% 
+  select(game_id, player_tag, team_id, color, team_region, core_shots, core_goals, core_saves, core_assists, core_score,
+         boost_avg_amount, boost_amount_collected, movement_time_boost_speed, movement_time_supersonic_speed,
+         movement_time_boost_speed, movement_avg_speed,positioning_avg_distance_to_mates, positioning_time_closest_to_ball,
+         positioning_time_offensive_third, positioning_time_offensive_half, positioning_time_defensive_third,
+         positioning_time_defensive_half, demo_inflicted,
+         advanced_mvp, winner))
+```
+
+Question 1) Quels joueurs ont été les plus performants en termes de buts marqués, assistés ou sauvés dans la saison?
+
+Réponse: Le joueur le plus performant lorsqu'on se base sur le nombre de buts comptés, assistés effectués et buts sauvés est Vatira. Il est suivi par Joyo, M0nkey M00n, rise., et Atomic. Afin de parvenir à ce résultat, nous avons combiné les trois sujets d'observations. Chacune d'entre elles valait un point et, en les additionnant ensemble, cela nous permettait d'illustrer quel joueur a effectué le plus grand total d'action bénéfique à son équipe. Nous avons utilisé un graphique à barres afin de montrer quel pourcentage de point était associé à quel type d'action (assist, goal, save).
+
+```{r total_points}
+total_points<-games_data %>%
+  group_by(player_tag) %>%
+  summarize(total_points = sum(core_goals, core_saves, core_assists)) %>% 
+  arrange(desc(total_points)) %>% 
+  slice(1:50)
+
+total_points_long <- games_data %>%
+  group_by(player_tag) %>%
+  summarize(goals = sum(core_goals),
+            saves = sum(core_saves),
+            assists = sum(core_assists)) %>%
+  filter(player_tag %in% total_points$player_tag) %>%
+  pivot_longer(cols = c(goals, saves, assists), 
+               names_to = "category", 
+               values_to = "points")
+ggplot(total_points_long, aes(x = reorder(player_tag, desc(points)), y = points, fill = category)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total des points par joueur", x = "Player_tag", y = "Total des points")
+total_points
+
+#https://stackoverflow.com/questions/38831020/r-add-lines-or-segments-to-barchart
+#https://stt4230.rbind.io/communication_resultats/graphiques_r/#procédure-de-création-dun-graphique
+```
+
+
+```{r Q1.1 buts totaux}
+total_goal<-games_data %>%
+  group_by(player_tag) %>%
+  summarise(tot_goal = sum(core_goals, na.rm = TRUE)) %>%
+  arrange(desc(tot_goal)) %>%  
+  slice(1:50)
+total_goal
+```
+```{r Q1.2 arrets totaux}
+total_save<-games_data %>%
+  group_by(player_tag) %>%
+  summarise(tot_save = sum(core_saves, na.rm = TRUE)) %>%
+  arrange(desc(tot_save)) %>%  
+  slice(1:50)
+total_save
+
+```
+```{r Q1.3 assists totaux}
+total_assist<-games_data %>%
+  group_by(player_tag) %>%
+  summarise(tot_assist = sum(core_assists, na.rm = TRUE)) %>%
+  arrange(desc(tot_assist)) %>%  
+  slice(1:50)
+total_assist
+```
+
+# https://stackoverflow.com/questions/15291613/merge-3-data-frames-by-column-names
+# https://r-graph-gallery.com/218-basic-barplots-with-ggplot2.html
+
+Question 2) Quelles équipes ont remporté le plus de matchs durant la saison régulière de la RCLCS 2021-2022?
+
+Réponse: Les équipes n'ont pas de noms pour les identifier. Elles sont identifiables par leurs numéros d'identification. Ainsi, les trois équipes ayant remporté le plus de math lors de la saison de la RCLCS 2021-2022 sont les équipes 6020bc70f1e4807cc70023a5, 60bbc8518029840609c3b437 et 6065dbab45122f213019c81f avec respectivement 246, 231 et 213 matchs gagnés.
+
+```{r Q2.1 nombre de victoires par équipe}
+games_data %>% 
+  group_by(team_id) %>% 
+  filter(winner == "TRUE")%>% 
+  distinct(game_id, .keep_all = TRUE) %>% 
+  count(winner)%>% 
+  arrange(desc(n)) %>% 
+  rename("nb.victoires" = n) %>% 
+  select(team_id, nb.victoires)
+
+#https://www.datanovia.com/en/lessons/identify-and-remove-duplicate-data-in-r/
+```
+
+Question 3) Quel a été le plus grand écart de points dans un seul match des séries? 
+
+Réponse: Le plus grand écart de point observé lors de la série a été lors de la partie à l'identifiant 61f90c5cda9d7ca1c7ba73c3. Lors de ce match, l'équipe bleue a dominé l'équipe orange avec un différentiel final de +18 points. Pour parvenir à cette conclusion, nous avons généré un graphique à barres, permettant d'illustrer la différence de point entre chaque équipe pour les 50 parties ayant un score final différentiel le plus élevé. Avec ce graphique, nous observons également que les équipes bleues ont tendance à gagner tandis que les équipes orange ont tendance à perdre.
+
+```{r Q3}
+diff_score <- games_data %>% 
+  group_by(game_id, color) %>% 
+  summarise(core_score_team = sum(core_goals), .groups = "drop") %>% 
+  spread(color, core_score_team) %>%
+  mutate(
+    diff_core_score_team = orange - blue, 
+    winner = ifelse(diff_core_score_team > 0, "orange", "blue")
+  ) %>%
+  arrange(desc(abs(diff_core_score_team))) %>%
+  slice(1:50)
+
+ggplot(diff_score, aes(x = as.factor(game_id), y = diff_core_score_team, fill = winner)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Différence de points par match", 
+       x = "Game ID", 
+       y = "Difference de points")+
+scale_fill_manual(values = c("blue" = "cyan3", "orange" = "#FF8247"))
+diff_score
+#https://stackoverflow.com/questions/66755672/how-to-do-subtraction-multiple-column-by-group-in-r
+#https://timbolle.github.io/PRO1036/slides/02%20-%20Dataviz/02%20-%20dataviz.html#colour
+#https://stackoverflow.com/questions/36048033/manually-colouring-plots-with-scale-fill-manual-in-ggplot2-not-working
+#https://r-charts.com/colors/
+#https://rfortherestofus.com/2023/10/ggplot-order
+```
+
+Question 4) Comment les statistiques de boost influencent la capacité des joueurs à garder une vitesse élevée?
+
+Réponse: Nous avons utilisé une régression linéaire afin de modéliser la corrélation entre les boosts consommés par les joueurs et leurs vitesses moyennes. Nous constatons qu'en théorie, plus un joueur consomme de boost alors, plus sa vitesse moyenne sera élevée. Or, la zone ombragée démontre que cette règle est plutôt imprécise et nous observons que plusieurs données sont situées plutôt loin de la droite. En fait, cela pourrait être expliqué par l'utilisation des freins, des changements de direction ou de l'exécution de diverses manœuvres menant à une perte de vitesse. Ainsi, on peut conclure que le boost contribue à augmenter la vitesse moyenne d'un bolide, mais elle n'en est pas la seule influence, ce qui explique la grande incertitude au graphique.
+
+```{r Q4.1 }
+stats_vitesse<-games_by_players %>% 
+  group_by(player_tag) %>% 
+  summarize(avg_boost = mean(boost_bcpm, na.rm = TRUE),
+            avg_speed= mean(movement_avg_speed, na.rm = TRUE)) %>% 
+  arrange(desc(avg_speed)) 
+
+ggplot(stats_vitesse, aes(x = avg_boost, y = avg_speed))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = lm)+
+  labs(title = "Relation entre le boost moyen et le temps moyen à vitesse boostée",
+       x= "boost moyen",
+       y= "vitesse moyenne")
+  
+```
+
+Question 5) Quelle est la relation entre la position d'un joueur et son efficacité défensive/offensive?
+
+Réponse:  Nous avons fait deux régressions linéaires afin de modéliser en premier lieu la corrélation entre les temps positionnés en défense et le nombre de buts sauvé. Ce graphique permet de remarquer qu'il semble bien exister un lien fort entre ces deux variables. En effet, plus un joueur passe de temps dans le tiers de zone défensif, plus il a d'occasions de bloquer des tirs au but puisqu'il en est proche. En second lieu, nous visualisons la corrélation entre les temps positionnés en offense et le nombre de tirs au but. Nous en déduisons un constat similaire à la corrélation précédente.
+
+En comparant les deux graphiques, nous pouvons voir que ceux concentrés sur la défense passent plus de temps dans leurs tiers de zone respectif pour moins d'interaction avec la balle que ceux en offense. Cela peut s'expliquer par le fait que ceux en défense ont théoriquement un rôle moins actif en général puisque le but qu'ils protègent ne bouge pas comparé à la balle.
+
+Cependant, un joueur en particulier semble contourner ce constat en se plaçant dans le top deux des buts sauvés ET marqués! il s’agit de Vatira, le joueur qui était le plus performant selon les critères de la question 1. Il a également un temps passé dans les tiers de zone offensive et défensive considérable.
+
+
+```{r Q5.1}
+Impact_pos_def<-games_data %>% 
+  group_by(player_tag) %>% 
+  select(core_saves, positioning_time_defensive_third)  %>% 
+  summarise(saves_tot= sum(core_saves),
+            tot_time_defensive_third = sum(positioning_time_defensive_third)) %>% 
+  arrange(desc(saves_tot)) 
+
+ggplot(Impact_pos_def, aes(x = tot_time_defensive_third, y = saves_tot))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = lm)+
+  labs(title = "Relation entre le temps passé en tier défensif et le nombre d'arrêts effectués",
+       x= "temps en tier défensif",
+       y= "nombre d'arrêts")
+Impact_pos_def
+
+```
+
+```{r Q5.2}
+Impact_pos_off<-games_data %>% 
+  group_by(player_tag) %>% 
+  select(core_shots, positioning_time_offensive_third, player_tag)  %>% 
+  summarise(shots_tot= sum(core_shots),
+            tot_time_offensive_third = sum(positioning_time_offensive_third)) %>% 
+  arrange(desc(shots_tot)) 
+
+ggplot(Impact_pos_off, aes(x = tot_time_offensive_third, y = shots_tot))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = lm)+
+  labs(title = "Relation entre le temps passé en tier offensif et le nombre de tirs effectués",
+       x= "temps en tier offensif",
+       y= "nombre de tirs")
+Impact_pos_off
+```
+
+Hypothèse 1: Les équipes avec un ou des joueurs souvent MVP gagnent plus souvent.
+
+Réponse: Selon une régression linéaire et un autre graphique fait avec le nombre de fois que les joueurs ont été MVP et le nombre de victoires des équipes dans lesquelles ils ont été, il semble bien y avoir une relation entre ces deux variables. 
+Avec la régression linéaire, nous constatons que la tendance n'est pas tout à fait bien répartie. En effet, il y a quand même plusieurs équipes ayant des joueurs avec plus de 75 fois le titre de MVP qui ont peut de victoires. Il y a tout de même une tendance visible qui indique qu'il y a bien une relation entre les deux valeurs.
+Le second graphique explique la répartition des données. Ce graphique est basé sur le précédent, mais il relie toutes les données d'un même joueur par une ligne. De toute évidence, certains joueurs ont participé dans plus d'une équipe. On peut ainsi voir que le joueur ayant été le plus de fois MVP a participé dans deux équipes: l'une est dans celles avec le plus grand nombre de victoires, l'autre dans celles qui en ont le plus bas nombre. 
+On peut donc dire que, malgré la tendance des joueurs MVP à être dans les équipes gagnante, même d'avoir le meilleur MVP ne garantit pas la victoire.
+Aussi, pour une prochaine fois, il serait intéressant de voir le nombre de parties que les joueurs ont passé dans chaque équipe : peut-être que le meilleur MVP n'a été dans l'équipe avec peu de victoires qu'une seule fois, ce qui changerait les choses.
+
+(Ce code peut être un peu lent à charger...)
+```{r H1: 1}
+MVP_players<-games_data %>%  
+  group_by(player_tag) %>% 
+  mutate(MVP = sum(advanced_mvp)) %>% 
+  group_by(team_id, player_tag) %>% 
+  mutate(
+    winning = case_when(
+        winner=="TRUE" ~ 1,
+        winner=="FALSE" ~ 0)) %>%   
+  summarise(MVP,
+            wins = sum(winning)) %>% 
+  distinct(player_tag, .keep_all = TRUE) %>% 
+  arrange(desc(MVP))
+
+ggplot(MVP_players, aes(x = wins, y = MVP)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = lm)+
+  labs(x = "Victoires de l'équipe", y = "Joueurs MVP", title = "Relation entre MVP et victoires")
+
+ggplot(MVP_players, aes(x = wins, y = MVP, colour = player_tag)) +
+  geom_point(alpha = 0.5) +
+  theme(legend.position = "none")+  
+  geom_smooth(method = lm)+
+  labs(x = "Victoires de l'équipe", y = "Joueurs MVP", title = "Relation entre MVP et victoires")+
+  scale_color_viridis_d()
+
+#https://www.datanovia.com/en/blog/how-to-remove-legend-from-a-ggplot/
+```
+
+
+
+Hypothèse 2: les équipes qui maintiennent un temps de possession de balle élevée et un bon taux de tirs cadrés ont plus de chance de remporter leurs matchs.
+
+Réponse: En mettant en relation le temps total où les équipes étaient en possession de la balle avec le nombre de victoires de celle-ci, nous pouvons voir une tendance linéaire claire. Nous pouvons donc considérer qu'une équipe réussissant à garder la balle pendant de longues périodes de temps a une meilleure chance de remporter la victoire. Nous pouvons également constater que l'équipe avec le temps de possession le plus élevé est également celle avec le plus grand nombre de victoires.
+Alors que pour la précision des tirs au but, nous pouvons tout de suite constater que la relation n'est pas croissante linéaire. Effectivement, les équipes avec une précision un peu plus bas que la moyenne sont celles avec le plus de victoires. La moyenne semblant être aux alentours de 27%, la précision ne semble vraiment pas être un facteur déterminant de victoires. Pour mieux expliquer ce phénomène, la couleur du graphique est un dégradé représentant le nombre de tirs au but des équipes. On peut donc observer que celui-ci semble être élevé pour les équipe gagnante et basse pour celles perdantes. Évidemment, si tu ne réussis qu'à tenter 5 buts et en réussis 4, ta précision est de 80%, mais tu n'as quand même fait que 4 buts. Tandis qu'une équipe ayant tenté 3000 tirs au but avec une précision de 25% ressortira avec 750 buts.
+
+
+```{r H2: 1.1}
+time_ball<-games_data %>%
+  group_by(team_id) %>% 
+  mutate(
+    winning = case_when(
+        winner=="TRUE" ~ 1,
+        winner=="FALSE" ~ 0)) %>% 
+  summarise(time_ball_team = sum(positioning_time_closest_to_ball),
+            wins = sum(winning)/3) %>% 
+  arrange(desc(time_ball_team))
+
+ggplot(time_ball, aes(x = wins, y = time_ball_team)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = lm)+
+  labs(x = "Victoires", y = "Temps en possession", title = "Relation entre temps en possession de la balle et victoires")
+
+```
+
+```{r H2: 2.1}
+precision_rate<-games_data %>% 
+  group_by(team_id) %>% 
+  mutate(
+    winning = case_when(
+        winner=="TRUE" ~ 1,
+        winner=="FALSE" ~ 0)) %>%  
+  summarise(core_shots_team = sum(core_shots),
+            core_goals_team = sum(core_goals),
+            rate_precision_team = (core_goals_team/core_shots_team*100),
+            wins = sum(winning)/3) %>% 
+  arrange(desc(rate_precision_team))
+
+ggplot(precision_rate, aes(x = wins, y = rate_precision_team, colour = core_shots_team)) +
+  geom_point() +
+  geom_smooth(method = lm, colour = "black")+
+  labs(x = "Victoires", y = "Précision (%)", title = "Relation entre la précision des tirs des équipes et victoires")
+  
+
+```
+
+Hypothèse 3 : les équipes qui adoptent un style de jeu plus offensif on plus de succès, puisqu’elles réduisent le nombre de défenseurs et se concentrent sur l’attaque.
+
+Réponse: Quatre variables ont été regroupées en un graphique: le temps dans la moitié offensive, le temps dans le tiers offensif, le nombre de démolitions et le nombre de victoires. Puisque le tiers de zone est inclus dans la moitié de zone, elle est représentée par un dégradé de couleur. La quantité de démolitions est représentée par la grosseur des points. Si l'on regarde ces trois indicateurs séparément, l'on peut voir que leurs valeurs semblent augmenter avec le nombre de victoires. 
+De plus, si l'on analyse ces trois variables ensemble, on peut voir qu’elles semblent avoir une tendance commune: les équipes ayant les plus grandes valeurs dans les trois catégories sont aussi celles gagnantes. Si l'on devait choisir, la valeur ayant l'impact le moins important est vraisemblablement le nombre de démolitions, puisque sa croissance est la moins constante.
+Donc d'adopter un mode de jeu agressif est à première vue avantageux et favorise les victoires.
+
+Mais est-ce réellement le cas?
+En faisant un second graphique affichant les variables défensives, nous obtenons un résultat semblable: les données adoptent un comportement légèrement moins linéaire, mais les tendances sont les mêmes. Évidement, le nombre de démolitions et de victoires resterons identique puisqu’il s'agit des même équipe, mais nous pouvons voir que les équipes gagnantes ont en fait passé beaucoup plus de temps en défense en regardant l'axe des y ainsi que la légende de couleur. 
+Il semblerait donc qu'au finale, la jouer prudemment est à favoriser.
+
+
+```{r H3: 1.1}
+demolition<-games_data %>%
+  group_by(team_id) %>% 
+  mutate(
+    winning = case_when(
+        winner=="TRUE" ~ 1,
+        winner=="FALSE" ~ 0)) %>% 
+  summarise(demo_inflicted_team = sum(demo_inflicted),
+            wins = sum(winning)/3) %>% 
+  arrange(desc(demo_inflicted_team))
+
+
+```
+
+```{r H3: 1.2}
+time_third<-games_data %>%
+  group_by(team_id) %>% 
+  mutate(
+    winning = case_when(
+        winner=="TRUE" ~ 1,
+        winner=="FALSE" ~ 0)) %>% 
+  summarise(time_offensive_third_team = sum(positioning_time_offensive_third),
+            time_defensive_third_team = sum(positioning_time_defensive_third),
+            wins = sum(winning)/3) %>% 
+  arrange(desc(time_offensive_third_team))
+
+```
+
+```{r H3: 1.3}
+time_half<-games_data %>%
+  group_by(team_id) %>% 
+  mutate(
+    winning = case_when(
+        winner=="TRUE" ~ 1,
+        winner=="FALSE" ~ 0)) %>% 
+  summarise(time_offensive_half_team = sum(positioning_time_offensive_half),
+            time_defensive_half_team = sum(positioning_time_defensive_half),
+            wins = sum(winning)/3) %>% 
+  arrange(desc(time_offensive_half_team))
+
+
+```
+
+```{r H3: 1.4}
+offensive<- merge(demolition, time_half) %>% merge(time_third)
+
+
+ggplot(offensive, aes(x = wins, y = time_offensive_half_team, colour = time_offensive_third_team, size = demo_inflicted_team)) +
+  geom_point(alpha = 0.5)+
+  labs(x = "Victoires", y = "Temps dans la moitié offensive", title = "Relation entre le temps en zones offensives, le nb. de démolitions et de victoires", colour = "Temps dans le tier offensif", size = "Nb. de démolitions")
+
+#https://stackoverflow.com/questions/15291613/merge-3-data-frames-by-column-names
+```
+
+```{r H3: 1.4}
+defensive<- merge(demolition, time_half) %>% merge(time_third)
+
+options(scipen = 999)
+ggplot(offensive, aes(x = wins, y = time_defensive_half_team, colour = time_defensive_third_team, size = demo_inflicted_team)) +
+  geom_point(alpha = 0.5)+
+  labs(x = "Victoires", y = "Temps dans la moitié defensive", title = "Relation entre le temps en zones defensives, le nb. de démolitions et de victoires", colour = "Temps dans le tier defensif", size = "Nb. de démolitions")
+
+# https://favtutor.com/blogs/remove-scientific-notation-r
+```
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
